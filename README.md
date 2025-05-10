@@ -34,7 +34,7 @@ L’interface utilisateur permet aux utilisateurs d’interagir avec le chatbot.
   - `src/` : Composants, services, et logique frontend.
   - `package.json` : Dépendances JavaScript.
  
-Pour run le projet (qui tourne en react):
+### Pour run le projet:
 - Aller dans le dossier frontend
 - S'assurer d'avoir Node.js: node -v / npm -v
 - npm install
