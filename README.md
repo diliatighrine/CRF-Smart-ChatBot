@@ -29,10 +29,16 @@ Le backend fournit des services pour le traitement des requêtes, incluant la ge
 
 L’interface utilisateur permet aux utilisateurs d’interagir avec le chatbot.
 
-- Technologies utilisées : Angular ou React (en fonction de la préférence de l’équipe)
+- Technologies utilisées : React et runner Vite
 - Structure :
   - `src/` : Composants, services, et logique frontend.
   - `package.json` : Dépendances JavaScript.
+ 
+Pour run le projet (qui tourne en react):
+- Aller dans le dossier frontend
+- S'assurer d'avoir Node.js: node -v / npm -v
+- npm install
+- npm run dev
 
 ### Documents
 
