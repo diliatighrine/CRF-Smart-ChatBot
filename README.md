@@ -33,13 +33,13 @@ L’interface utilisateur permet aux utilisateurs d’interagir avec le chatbot.
 - Structure :
   - `src/` : Composants, services, et logique frontend.
   - `package.json` : Dépendances JavaScript.
- 
-### Pour run le projet:
-- Aller dans le dossier frontend
-- S'assurer d'avoir Node.js: node -v / npm -v
-- npm install
-- npm run dev
 
 ### Documents
 
 Le dossier `docs/` contient les documents relatifs à la conception du projet, y compris les spécifications techniques, les diagrammes, et le cahier des charges.
+
+## Pour run le projet:
+- Aller dans le dossier frontend
+- S'assurer d'avoir Node.js: node -v / npm -v
+- npm install
+- npm run dev
