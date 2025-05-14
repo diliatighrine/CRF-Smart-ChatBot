@@ -5,7 +5,7 @@ Analyse le message utilisateur et redirige vers le module approprié (image, RAG
 
 import logging
 from functions.image_generator import generate_image
-from functions.rag import contextual_answer
+from functions.rag_langchain import rag_langchain_answer
 from functions.intent_classifier import classify_intent
 
 logging.basicConfig(level=logging.INFO)
@@ -43,7 +43,7 @@ def route_request(message, user_id):
         response = generate_image(message)
         response_type = 'image'
     elif decision == 'document':
-        response = contextual_answer(message)
+        response = rag_langchain_answer(message)
         response_type = 'text'
     elif decision == 'aide':
         response = "Voici la FAQ ou l'aide du chatbot. (Réponse simulée)"

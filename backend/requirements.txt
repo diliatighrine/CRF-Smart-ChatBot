@@ -5,3 +5,7 @@ deep-translator
 transformers
 torch
 huggingface_hub
+langchain
+langchain-community
+faiss-cpu
+sentence-transformers

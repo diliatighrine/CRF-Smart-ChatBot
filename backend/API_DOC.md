@@ -30,6 +30,20 @@
   - `transformers` : bibliothèque pour utiliser des modèles de NLP pré-entraînés (ici DistilBERT).
   - `torch` : backend nécessaire pour faire tourner les modèles de deep learning.
 
+## Technologies utilisées
+
+- **Flask** : Framework web Python pour l'API REST.
+- **Stability.ai (Stable Diffusion)** : Génération d'images à partir de texte via l'API externe.
+- **deep-translator** : Traduction automatique des prompts pour la génération d'images.
+- **Transformers (HuggingFace)** : Modèle DistilBERT pour la classification d'intention (zero-shot-classification).
+- **Torch** : Backend deep learning pour les modèles NLP.
+- **LangChain** : Orchestration de la RAG avancée (vectorisation, recherche sémantique).
+- **sentence-transformers** : Génération d'embeddings pour la recherche vectorielle.
+- **FAISS** : Indexation et recherche vectorielle rapide en mémoire.
+- **python-dotenv** : Gestion sécurisée des variables d'environnement.
+- **requests** : Requêtes HTTP vers les APIs externes.
+- **huggingface_hub** : Téléchargement et gestion des modèles NLP.
+
 ## Endpoint principal
 
 POST `/chat`
