@@ -1,1 +1,6 @@
 flask
+requests
+python-dotenv
+deep-translator
+transformers
+torch

@@ -1,5 +1,35 @@
 # Documentation de l'API Backend
 
+> **Avant de lancer le backend, installez les dépendances Python avec :**
+> ```bash
+> pip install -r requirements.txt
+> ```
+
+## Structure des fichiers et dossiers du backend
+
+- `app.py` : Point d'entrée de l'application Flask. Définit l'API REST `/chat` et gère la réception des requêtes du frontend.
+- `requirements.txt` : Liste des dépendances Python nécessaires au backend (Flask, requests, python-dotenv, deep-translator, transformers, torch).
+- `API_DOC.md` : Ce fichier, documentation technique et fonctionnelle du backend.
+- `documents/` : Dossier contenant les fichiers texte utilisés comme base documentaire pour la recherche contextuelle (RAG).
+    - `contact.txt`, `crf_presentation.txt`, `missions.txt`, `historique.txt` : Exemples de documents utilisés par le module RAG.
+- `functions/` : Dossier des modules fonctionnels du backend.
+    - `image_generator.py` : Module de génération d'images. Utilise l'API Stability.ai (Stable Diffusion) pour générer une image à partir d'un prompt utilisateur (avec traduction automatique en anglais si besoin). Retourne une image encodée en base64 (data URL).
+    - `rag.py` : Module de recherche contextuelle (RAG). Recherche la réponse la plus pertinente dans les fichiers du dossier `documents/` en fonction de la question utilisateur.
+    - `intent_classifier.py` : Classifieur d'intention basé sur DistilBERT (modèle Hugging Face). Permet de détecter automatiquement l'intention d'un message utilisateur (image, document, aide, simple) pour un routage intelligent dans le backend.
+    - `__pycache__/` : Dossier généré automatiquement par Python pour accélérer l'exécution (à ignorer dans le versionnement).
+- `router/` : Dossier contenant la logique de routage intelligent.
+    - `router.py` : Router principal. Analyse chaque message utilisateur, utilise le classifieur d'intention, et redirige la requête vers le bon module (image, RAG, aide, simple). Logue chaque décision d'aiguillage.
+    - `__pycache__/` : Dossier généré automatiquement par Python pour accélérer l'exécution (à ignorer dans le versionnement).
+
+## Fichiers et modules spécifiques
+
+- `functions/intent_classifier.py` :
+  Classifieur d'intention basé sur DistilBERT (modèle Hugging Face). Permet de détecter automatiquement l'intention d'un message utilisateur (image, document, aide, simple) pour un routage intelligent dans le backend.
+  
+- Dépendances associées :
+  - `transformers` : bibliothèque pour utiliser des modèles de NLP pré-entraînés (ici DistilBERT).
+  - `torch` : backend nécessaire pour faire tourner les modèles de deep learning.
+
 ## Endpoint principal
 
 POST `/chat`
@@ -32,7 +62,7 @@ POST `/chat`
 ### Exemple de réponse (image)
 ```json
 {
-  "response": "https://via.placeholder.com/300x200.png?text=g%C3%A9n%C3%A8re+une+image+de+la+CRF",
+  "response": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA...",
   "type": "image",
   "metadata": {
     "user_id": "test",
