@@ -1,0 +1,35 @@
+### Test génération d'image
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "génère une image de la CRF",
+  "user_id": "test"
+}
+
+### Test recherche contextuelle (RAG)
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "document bénévolat",
+  "user_id": "test"
+}
+
+### Test aide/FAQ
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "aide",
+  "user_id": "test"
+}
+
+### Test message vide (erreur)
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "",
+  "user_id": "test"
+}
