@@ -30,10 +30,39 @@ def contextual_answer(question):
         str: Extrait du document le plus pertinent ou message d'absence de résultat.
     """
     docs = load_documents()
+    # Mapping mots-clés documentaires → fichiers
+    keyword_to_file = {
+        "histoire": "historique.txt",
+        "historique": "historique.txt",
+        "mission": "missions.txt",
+        "missions": "missions.txt",
+        "présentation": "crf_presentation.txt",
+        "presentation": "crf_presentation.txt",
+        "contact": "contact.txt",
+        "origine": "historique.txt",
+        "création": "historique.txt",
+        "fondateur": "historique.txt",
+        "but": "missions.txt",
+        "objectif": "missions.txt"
+    }
+    question_lower = question.lower()
+    selected_file = None
+    for kw, fname in keyword_to_file.items():
+        if kw in question_lower:
+            if fname in docs:
+                selected_file = fname
+                break
     best_match = None
     best_score = 0
+    if selected_file:
+        # Priorité au fichier associé au mot-clé
+        content = docs[selected_file]
+        score = difflib.SequenceMatcher(None, question_lower, content.lower()).ratio()
+        if score > 0.1:
+            return f"Réponse extraite du document '{selected_file}' : {content[:200]}"
+        # Si le score est trop faible, fallback sur la recherche classique
     for fname, content in docs.items():
-        score = difflib.SequenceMatcher(None, question.lower(), content.lower()).ratio()
+        score = difflib.SequenceMatcher(None, question_lower, content.lower()).ratio()
         if score > best_score:
             best_score = score
             best_match = (fname, content)

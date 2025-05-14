@@ -4,3 +4,4 @@ python-dotenv
 deep-translator
 transformers
 torch
+huggingface_hub
