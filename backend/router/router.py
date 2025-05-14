@@ -25,10 +25,16 @@ def route_request(message, user_id):
     document_keywords = [
         "histoire", "mission", "présentation", "origine", "création", "fondateur", "but", "objectif"
     ]
+    # Ajout d'une règle manuelle pour surclasser l'intention si mots-clés d'aide/FAQ détectés
+    aide_keywords = [
+        "fonctionne", "fonctionnement", "utiliser", "mode d'emploi", "faq", "comment faire", "aide", "support", "explication", "explications", "guide", "tutoriel"
+    ]
+    msg_lower = message.lower()
     if intent != 'image':
-        msg_lower = message.lower()
-        if any(kw in msg_lower for kw in document_keywords):
-            decision = 'document'  # Surclassement
+        if any(kw in msg_lower for kw in aide_keywords):
+            decision = 'aide'  # Surclassement aide/FAQ prioritaire
+        elif any(kw in msg_lower for kw in document_keywords):
+            decision = 'document'  # Surclassement document
     response = None
     response_type = None
     metadata = {"user_id": user_id, "intent": intent, "router_decision": decision}
