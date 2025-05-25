@@ -1,54 +1,141 @@
-# React + TypeScript + Vite
+# Intelligent Chatbot Router
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Project Structure
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```
+src/
+├── components/
+│   └── ChatbotInterface.tsx      # Main React component
+├── services/
+│   ├── IntentClassifier.js       # Pattern-based classifier
+│   ├── MLIntentClassifier.js     # ML-based classifier (Transformers.js)
+│   └── IntelligentRouter.js      # Router that uses either classifier
+└── types.ts                      # TypeScript type definitions
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Why Two Classifier Approaches?
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 1. Pattern-Based Classifier (Default)
+- **Pros:**
+  - ✅ Instant loading (no model download)
+  - ✅ Lightweight (~5KB)
+  - ✅ Fast classification (<1ms)
+  - ✅ Works offline
+  - ✅ Easy to customize and debug
+- **Cons:**
+  - ❌ Less accurate for complex queries
+  - ❌ Requires manual pattern updates
+  - ❌ Limited to predefined keywords
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+### 2. ML-Based Classifier (Optional)
+- **Pros:**
+  - ✅ More accurate intent detection
+  - ✅ Handles complex/ambiguous queries
+  - ✅ Zero-shot classification (no training needed)
+  - ✅ Better generalization
+- **Cons:**
+  - ❌ Large model download (~100MB)
+  - ❌ Slower initial load
+  - ❌ Requires more resources
+  - ❌ May not work on all devices
+
+## Installation
+
+### Basic Setup (Pattern-based only)
+```bash
+npm install lucide-react
 ```
+
+### Full Setup (Including ML support)
+```bash
+npm install lucide-react @xenova/transformers
+```
+
+## Usage
+
+### Import the components:
+```typescript
+import ChatbotInterface from './components/ChatbotInterface';
+```
+
+### Use in your app:
+```tsx
+function App() {
+  return <ChatbotInterface />;
+}
+```
+
+## Customization
+
+### Adding New Intents
+
+1. **Pattern-based (IntentClassifier.js):**
+```javascript
+this.intentPatterns = {
+  newIntent: {
+    keywords: ['keyword1', 'keyword2'],
+    patterns: [/pattern1/i, /pattern2/i],
+    priority: 1
+  }
+}
+```
+
+2. **ML-based (MLIntentClassifier.js):**
+```javascript
+this.intentLabels = [
+  'existing intents...',
+  'new intent description'
+];
+
+this.labelToIntent = {
+  'new intent description': 'newIntent'
+};
+```
+
+### Adding New Models
+
+Update the model mapping in `IntelligentRouter.js`:
+```javascript
+this.modelMapping = {
+  'image': 'Image Generator',
+  'document': 'Gemini 2',
+  'help': 'Best',
+  'simple': 'Best',
+  'newIntent': 'New Model'
+};
+```
+
+## Performance Considerations
+
+### Pattern-based Classifier
+- **Memory:** ~50KB
+- **CPU:** Minimal
+- **Latency:** <1ms per classification
+
+### ML-based Classifier
+- **Memory:** ~200MB (including model)
+- **CPU:** Moderate (during classification)
+- **Latency:** 50-200ms per classification
+- **Initial Load:** 5-30 seconds (model download)
+
+## Best Practices
+
+1. **Start with Pattern-based**: Use the lightweight pattern classifier for most use cases
+2. **Add ML for Complex Apps**: Enable ML classification only when needed
+3. **Cache ML Models**: Models are cached after first download
+4. **Monitor Performance**: Use the built-in metrics to track routing performance
+5. **Test on Target Devices**: ML models may not work on low-end devices
+
+## Browser Support
+
+- Pattern-based: All modern browsers
+- ML-based: Chrome 91+, Firefox 89+, Safari 15+, Edge 91+
+
+## Future Enhancements
+
+- [ ] Custom model fine-tuning
+- [ ] Multi-language support
+- [ ] Confidence threshold configuration
+- [ ] A/B testing framework
+- [ ] Analytics dashboard
+- [ ] Model performance monitoring
