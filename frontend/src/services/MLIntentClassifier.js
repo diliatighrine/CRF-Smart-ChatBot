@@ -12,7 +12,7 @@ export class MLIntentClassifier {
     this.classifier = null;
     this.isLoading = false;
     this.isReady = false;
-    env.allowLocalModels = false;   // skip the bogus local check
+    env.allowLocalModels = false;   // skip the local check
     env.useBrowserCache  = false;   // flush any bad HTML already cached
     // Intent labels for zero-shot classification
     this.intentLabels = [
@@ -39,7 +39,8 @@ export class MLIntentClassifier {
     
     this.isLoading = true;
     console.log('Loading ML model for intent classification...');
-    
+    console.time('⏳ [ML] model-load');              // START timer
+
     try {
       // Load the zero-shot classification pipeline
       // This will download the model on first use (~100MB)
@@ -51,6 +52,8 @@ export class MLIntentClassifier {
       this.isReady = true;
       this.isLoading = false;
       console.log('ML model loaded successfully');
+      console.timeEnd('⏳ [ML] model-load');        // END timer
+
     } catch (error) {
       console.error('Failed to load ML model:', error);
       this.isLoading = false;
@@ -73,11 +76,13 @@ export class MLIntentClassifier {
 
     try {
       // Perform zero-shot classification
+       console.time('🔎 [ML] intent-analysis');
       const result = await this.classifier(message, this.intentLabels, {
         multi_label: false,
         hypothesis_template: 'This text is about {}.'
       });
-
+      console.timeEnd('🔎 [ML] intent-analysis');
+      console.log('🧠 Intent details →', result); 
       // Get the best matching label
       const bestLabel = result.labels[0];
       const bestScore = result.scores[0];

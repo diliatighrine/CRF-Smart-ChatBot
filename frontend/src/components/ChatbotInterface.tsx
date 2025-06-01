@@ -138,6 +138,14 @@ const ChatbotInterface = () => {
   };
 
   useEffect(() => {
+    // Enable ML classifier by default on mount
+    if (!useMLClassifier && !mlLoading) {
+      handleClassifierChange(true);
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
