@@ -1,0 +1,98 @@
+### Test génération d'image
+# Attendu : intent = image, le backend retourne une image (data URL)
+# Pourquoi : le prompt demande explicitement une image
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "génère une image de la CRF",
+  "user_id": "test"
+}
+
+### Test recherche contextuelle (RAG)
+# Attendu : intent = document, le backend retourne un extrait de document
+# Pourquoi : le prompt contient le mot 'document' et une demande d'information
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "document bénévolat",
+  "user_id": "test"
+}
+
+### Test aide/FAQ
+# Attendu : intent = aide, le backend retourne une réponse d'aide/FAQ
+# Pourquoi : le prompt demande de l'aide ou une FAQ
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "aide",
+  "user_id": "test"
+}
+
+### Test aide explicite
+# Attendu : intent = aide, le backend retourne une réponse d'aide/FAQ
+# Pourquoi : le prompt demande explicitement de l'aide
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "j'ai besoin d'aide sur la Croix-Rouge",
+  "user_id": "test"
+}
+
+### Test requête simple
+# Attendu : intent = simple, le backend retourne une réponse locale simple
+# Pourquoi : le message est une salutation sans demande spécifique
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "salut",
+  "user_id": "test"
+}
+
+### Test question sur l'historique
+# Attendu : intent = document, le backend retourne un extrait du document historique.txt
+# Pourquoi : le prompt demande une information sur l'histoire, ce qui correspond à une recherche documentaire
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "Peux-tu me raconter l'histoire de la Croix-Rouge ?",
+  "user_id": "test"
+}
+
+### Test question sur les missions
+# Attendu : intent = document, le backend retourne un extrait du document missions.txt
+# Pourquoi : le prompt demande les missions, ce qui correspond à une recherche documentaire
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "Quelles sont les missions de la Croix-Rouge ?",
+  "user_id": "test"
+}
+
+### Test message vide (erreur)
+# Attendu : erreur 400, message d'erreur JSON
+# Pourquoi : le champ message est vide
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "",
+  "user_id": "test"
+}
+
+### Test aide implicite
+# Attendu : intent = aide, le backend retourne une réponse d'aide/FAQ
+# Pourquoi : le prompt demande une FAQ sans utiliser le mot 'aide'
+POST http://127.0.0.1:5000/chat
+Content-Type: application/json
+
+{
+  "message": "Comment fonctionne le chatbot de la Croix-Rouge ?",
+  "user_id": "test"
+}
