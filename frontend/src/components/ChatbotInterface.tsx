@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Image, Zap, Crown, Star, Menu, Smile, Paperclip, FileText, HelpCircle, MessageSquare, Bot, Cpu, Brain } from 'lucide-react';
+import { Send, Image, Zap, Crown, Star, Menu, Smile, Paperclip, FileText, HelpCircle, MessageSquare, Bot, Cpu, Brain, Smartphone, Monitor } from 'lucide-react';
 //@ts-ignore 
 import { router } from '../services/IntelligentRouter';
+//@ts-ignore
+import { localModel } from '../services/LocalModelService';
+import LoadingScreen from './LoadingScreen';
 import type { Message, Model } from '../types';
 
 const ChatbotInterface = () => {
@@ -13,57 +16,106 @@ const ChatbotInterface = () => {
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [isResponding, setIsResponding] = useState(false);
   const [autoRouting, setAutoRouting] = useState(true);
-  const [useMLClassifier, setUseMLClassifier] = useState(false);
-  const [mlLoading, setMlLoading] = useState(false);
+  const [mlStatus, setMlStatus] = useState({ isReady: false, isLoading: true });
+  const [localModelStatus, setLocalModelStatus] = useState(localModel.getStatus());
+  const [localModelProgress, setLocalModelProgress] = useState(0);
+  const [isFullyReady, setIsFullyReady] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const models: Model[] = [
-    { id: 'best', name: 'Best', icon: <Star className="h-5 w-5" />, description: 'General purpose AI' },
-    { id: 'gemini2', name: 'Gemini 2', icon: <Crown className="h-5 w-5" />, description: 'Document analysis' },
-    { id: 'gemini2flash', name: 'Gemini 2 Flash', icon: <Zap className="h-5 w-5" />, description: 'Fast responses' },
-    { id: 'pro', name: 'Pro', icon: <Crown className="h-5 w-5 text-yellow-500" />, description: 'Advanced tasks' },
-    { id: 'imageGenerator', name: 'Image Generator', icon: <Image className="h-5 w-5" />, description: 'Create images' },
+    { id: 'best', name: 'Best', icon: <Star className="h-5 w-5" />, description: 'General purpose AI (Cloud)' },
+    { id: 'localModel', name: 'Local Model', icon: <Smartphone className="h-5 w-5" />, description: 'On-device AI' },
+    { id: 'gemini2', name: 'Gemini 2', icon: <Crown className="h-5 w-5" />, description: 'Document analysis (Cloud)' },
+    { id: 'gemini2flash', name: 'Gemini 2 Flash', icon: <Zap className="h-5 w-5" />, description: 'Fast responses (Cloud)' },
+    { id: 'pro', name: 'Pro', icon: <Crown className="h-5 w-5 text-yellow-500" />, description: 'Advanced tasks (Cloud)' },
+    { id: 'imageGenerator', name: 'Image Generator', icon: <Image className="h-5 w-5" />, description: 'Create images (Cloud)' },
   ];
 
   const getIntentIcon = (intent: string) => {
     switch (intent) {
       case 'image': return <Image className="h-4 w-4" />;
-      case 'document': return <FileText className="h-4 w-4" />;
+      case 'document': 
+      case 'document_complex': return <FileText className="h-4 w-4" />;
       case 'help': return <HelpCircle className="h-4 w-4" />;
+      case 'greeting': return <Smile className="h-4 w-4" />;
+      case 'complex': return <Crown className="h-4 w-4" />;
       default: return <MessageSquare className="h-4 w-4" />;
     }
   };
 
-  // Handle classifier type change
-  const handleClassifierChange = async (useML: boolean) => {
-    if (useML && !router.isReady()) {
-      setMlLoading(true);
-      try {
-        await router.switchClassifierType(true);
-        setUseMLClassifier(true);
-      } catch (error) {
-        console.error('Failed to load ML model:', error);
-        alert('Failed to load ML model. Using pattern-based classifier instead.');
-      } finally {
-        setMlLoading(false);
-      }
-    } else {
-      await router.switchClassifierType(useML);
-      setUseMLClassifier(useML);
+  const getDeviceIcon = (deviceType: string) => {
+    switch (deviceType) {
+      case 'high-end': return <Monitor className="h-4 w-4" />;
+      case 'mid-range': return <Monitor className="h-4 w-4" />;
+      case 'low-end': return <Smartphone className="h-4 w-4" />;
+      default: return <Cpu className="h-4 w-4" />;
     }
   };
 
-  const handleSendMessage = async () => {
-    if (input.trim() === '') return;
+  // Initialize models and check status
+  useEffect(() => {
+    let statusInterval: NodeJS.Timeout;
+    
+    const checkStatus = async () => {
+      // Check router status (includes both ML and local model)
+      const routerStatus = router.getStatus();
+      setMlStatus(routerStatus.classifier);
+      setLocalModelStatus(routerStatus.localModel);
+      
+      // Check if fully ready
+      const ready = router.isFullyReady();
+      if (ready && !isFullyReady) {
+        setIsFullyReady(true);
+        // Clear interval once ready
+        if (statusInterval) {
+          clearInterval(statusInterval);
+        }
+      }
+    };
+    
+    // Initial check
+    checkStatus();
+    
+    // Set up polling while loading
+    if (!isFullyReady) {
+      statusInterval = setInterval(checkStatus, 500);
+    }
+    
+    // Initialize local model with progress callback
+    const initLocalModel = async () => {
+      try {
+        await localModel.initialize((progress) => {
+          setLocalModelProgress(progress.progress || 0);
+        });
+      } catch (error) {
+        console.error('Failed to initialize local model:', error);
+      }
+    };
+    
+    if (!localModelStatus.isReady && !localModelStatus.isLoading) {
+      initLocalModel();
+    }
+    
+    return () => {
+      if (statusInterval) {
+        clearInterval(statusInterval);
+      }
+    };
+  }, [isFullyReady, localModelStatus.isReady, localModelStatus.isLoading]);
+
+  const handleSendMessage = async (imageUrl = null) => {
+    if (input.trim() === '' && !imageUrl) return;
 
     const userMessage = input.trim();
     let selectedModel = currentModel;
     let intent = 'simple';
+    let isLocal = false;
 
     // Add user message immediately
     setMessages(prev => [...prev, { 
       role: 'user', 
-      content: userMessage, 
+      content: userMessage,
+      image: imageUrl,
       timestamp: new Date().toISOString()
     }]);
     setInput('');
@@ -72,37 +124,51 @@ const ChatbotInterface = () => {
     try {
       // Use intelligent routing if enabled
       if (autoRouting) {
-        const routingResult = await router.route(userMessage, 'user-123');
+        const routingResult = await router.route(userMessage, 'user-123', imageUrl);
         selectedModel = routingResult.model;
         intent = routingResult.intent;
+        isLocal = routingResult.isLocal;
         
         // Update current model for future messages if auto-routing
         setCurrentModel(selectedModel);
         
         // Log metrics periodically
         const metrics = router.getMetrics();
-        if (metrics.totalRequests % 10 === 0) {
-          console.log('📊 Router metrics:', metrics);
+        if (metrics.totalRequests % 5 === 0) {
+          console.log('📊 Router metrics:', {
+            ...metrics,
+            localUsage: `${metrics.localModelPercentage}%`,
+            avgClassification: metrics.avgClassificationTime
+          });
         }
       }
 
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Generate appropriate response based on intent
       let responseContent = '';
-      switch (intent) {
-        case 'image':
-          responseContent = `I'll generate an image for you: "${userMessage}". The image is being processed and will appear below...`;
-          break;
-        case 'document':
-          responseContent = `Based on your question, I found relevant information in our documentation. Here's what I found about "${userMessage}"...`;
-          break;
-        case 'help':
-          responseContent = `I'd be happy to help you! Here's a guide on ${userMessage}:\n\n1. First step...\n2. Second step...\n3. Third step...`;
-          break;
-        default:
-          responseContent = `I understand you're asking about "${userMessage}". Let me provide you with some information...`;
+      let responseMetadata = {};
+
+      // Handle local model generation
+      if (selectedModel === 'Local Model' && localModelStatus.isReady) {
+        try {
+          const localResponse = await localModel.generate(userMessage, {
+            image: imageUrl,
+            maxTokens: 256
+          });
+          responseContent = localResponse.text;
+          responseMetadata = {
+            ...localResponse.metrics,
+            deviceType: localResponse.deviceType,
+            modelName: localResponse.model,
+          };
+        } catch (error) {
+          console.error('Local model error:', error);
+          // Fallback to cloud
+          selectedModel = 'Best';
+          isLocal = false;
+          responseContent = await generateCloudResponse(intent, userMessage);
+        }
+      } else {
+        // Use cloud model
+        responseContent = await generateCloudResponse(intent, userMessage);
       }
 
       setMessages(prev => [...prev, {
@@ -110,6 +176,8 @@ const ChatbotInterface = () => {
         content: responseContent,
         model: selectedModel,
         intent: intent,
+        isLocal: isLocal,
+        metadata: responseMetadata,
         timestamp: new Date().toISOString()
       }]);
     } catch (error) {
@@ -126,6 +194,29 @@ const ChatbotInterface = () => {
     }
   };
 
+  // Generate cloud response (simulated)
+  const generateCloudResponse = async (intent: string, userMessage: string) => {
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    switch (intent) {
+      case 'image':
+        return `I'll generate an image for you: "${userMessage}". The image is being processed and will appear below...`;
+      case 'document':
+        return `I found information about "${userMessage}". Here's what you need to know...`;
+      case 'document_complex':
+        return `I'll analyze this complex request about "${userMessage}". Here's a comprehensive analysis...`;
+      case 'help':
+        return `I'd be happy to help you! Here's a guide on ${userMessage}:\n\n1. First step...\n2. Second step...\n3. Third step...`;
+      case 'greeting':
+        return `Hello! Great to meet you. How can I assist you today?`;
+      case 'complex':
+        return `This is a complex request about "${userMessage}". Let me provide a detailed response...`;
+      default:
+        return `I understand you're asking about "${userMessage}". Let me provide you with some information...`;
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -138,19 +229,22 @@ const ChatbotInterface = () => {
   };
 
   useEffect(() => {
-    // Enable ML classifier by default on mount
-    if (!useMLClassifier && !mlLoading) {
-      handleClassifierChange(true);
-    }
-    // eslint-disable-next-line
-  }, []);
-
-  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   // Find the current model object
   const currentModelObj = models.find(model => model.name === currentModel) || models[0];
+
+  // Show loading screen until both models are ready
+  if (!isFullyReady) {
+    return (
+      <LoadingScreen 
+        mlStatus={mlStatus}
+        localModelStatus={localModelStatus}
+        localProgress={localModelProgress}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen w-screen bg-gray-50">
@@ -162,30 +256,17 @@ const ChatbotInterface = () => {
             <h1 className="text-xl font-semibold text-gray-800">Intelligent AI Chatbot</h1>
           </div>
           <div className="flex items-center space-x-4">
-            {/* Classifier type selector */}
-            <div className="flex items-center space-x-2 border-r pr-4">
-              {/* <button
-                onClick={() => handleClassifierChange(false)}
-                disabled={mlLoading}
-                className={`flex items-center space-x-1 px-2 py-1 rounded ${
-                  !useMLClassifier ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Cpu className="h-4 w-4" />
-                <span className="text-sm">Pattern</span>
-              </button> */}
-              <button
-                onClick={() => handleClassifierChange(true)}
-                disabled={mlLoading}
-                className={`flex items-center space-x-1 px-2 py-1 rounded ${
-                  useMLClassifier ? 'bg-indigo-100 text-indigo-700' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
+            {/* System status */}
+            <div className="flex items-center space-x-3 text-sm">
+              <div className="flex items-center space-x-1 text-green-600">
                 <Brain className="h-4 w-4" />
-                <span className="text-sm">ML</span>
-              </button>
-              {mlLoading && (
-                <span className="text-xs text-gray-500 ml-2">Loading model...</span>
+                <span>ML Active</span>
+              </div>
+              {localModelStatus.isReady && (
+                <div className="flex items-center space-x-1 text-green-600">
+                  {getDeviceIcon(localModelStatus.deviceType)}
+                  <span>{localModelStatus.model}</span>
+                </div>
               )}
             </div>
 
@@ -231,16 +312,26 @@ const ChatbotInterface = () => {
                         key={model.id}
                         className={`flex items-center px-4 py-2 text-sm w-full text-left hover:bg-gray-100 ${
                           currentModel === model.name ? 'bg-gray-50 text-indigo-600' : 'text-gray-700'
-                        }`}
+                        } ${model.name === 'Local Model' && !localModelStatus.isReady ? 'opacity-50' : ''}`}
                         onClick={() => {
+                          if (model.name === 'Local Model' && !localModelStatus.isReady) {
+                            alert('Local model is still loading...');
+                            return;
+                          }
                           setCurrentModel(model.name);
                           setIsModelMenuOpen(false);
                         }}
+                        disabled={model.name === 'Local Model' && !localModelStatus.isReady}
                       >
                         <span className="mr-2">{model.icon}</span>
                         <div className="flex-1 text-left">
                           <div className="font-medium">{model.name}</div>
-                          <div className="text-xs text-gray-500">{model.description}</div>
+                          <div className="text-xs text-gray-500">
+                            {model.description}
+                            {model.name === 'Local Model' && localModelStatus.model && (
+                              <span className="ml-1">({localModelStatus.model})</span>
+                            )}
+                          </div>
                         </div>
                         {currentModel === model.name && (
                           <svg className="ml-2 h-4 w-4 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
@@ -277,13 +368,23 @@ const ChatbotInterface = () => {
                     <div className="flex items-center">
                       {models.find(m => m.name === message.model)?.icon}
                       <span className="ml-1">{message.model}</span>
+                      {message.isLocal && (
+                        <span className="ml-2 px-1 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                          On-device
+                        </span>
+                      )}
                     </div>
-                    {message.intent && (
-                      <div className="flex items-center text-gray-400">
-                        {getIntentIcon(message.intent)}
-                        <span className="ml-1">{message.intent}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {message.intent && (
+                        <div className="flex items-center text-gray-400">
+                          {getIntentIcon(message.intent)}
+                          <span className="ml-1">{message.intent}</span>
+                        </div>
+                      )}
+                      {message.metadata?.responseTime && (
+                        <span className="text-gray-400">{message.metadata.responseTime}</span>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="whitespace-pre-wrap">{message.content}</div>
@@ -296,6 +397,11 @@ const ChatbotInterface = () => {
                 <div className="flex items-center text-xs text-gray-500 mb-1">
                   {currentModelObj.icon}
                   <span className="ml-1">{currentModel}</span>
+                  {currentModel === 'Local Model' && (
+                    <span className="ml-2 px-1 py-0.5 bg-green-100 text-green-700 rounded text-xs">
+                      Processing locally...
+                    </span>
+                  )}
                 </div>
                 <div className="flex space-x-1">
                   <div className="h-2 w-2 rounded-full bg-gray-300 animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -320,7 +426,7 @@ const ChatbotInterface = () => {
                 onKeyDown={handleKeyDown}
                 rows={1}
                 className="block w-full resize-none border-0 bg-transparent p-3 focus:outline-none focus:ring-0 sm:text-sm"
-                placeholder={autoRouting ? "Message AI (auto-routing enabled)..." : `Message ${currentModel}...`}
+                placeholder={autoRouting ? "Message AI (ML-powered routing enabled)..." : `Message ${currentModel}...`}
                 style={{ minHeight: '44px', maxHeight: '200px' }}
               />
             </div>
@@ -339,7 +445,7 @@ const ChatbotInterface = () => {
               </button>
               <button
                 type="button"
-                onClick={handleSendMessage}
+                onClick={() => handleSendMessage()}
                 disabled={!input.trim() || isResponding}
                 className={`rounded-full p-1 ${
                   input.trim() && !isResponding
@@ -353,8 +459,11 @@ const ChatbotInterface = () => {
           </div>
           <div className="mt-2 text-xs text-gray-500 text-center">
             {autoRouting ? 
-              `AI automatically selects the best model (using ${useMLClassifier ? 'ML' : 'pattern'} classifier)` :
+              `AI automatically selects the best model using ML intent classification` :
               `Chatting with ${currentModel} model`}
+            {localModelStatus.isReady && (
+              <span className="ml-2">• Local Model ready ({localModelStatus.model} on {localModelStatus.deviceType})</span>
+            )}
           </div>
         </div>
       </div>
