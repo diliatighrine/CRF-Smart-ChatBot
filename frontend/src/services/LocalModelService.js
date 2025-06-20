@@ -8,11 +8,48 @@ export class LocalModelService {
 
     // Detect device capabilities
     this.deviceType = this.detectDeviceType();
-    this.modelConfig = this.getModelConfig();
-
+    
     // Configure environment for better model loading
-    env.allowLocalModels = false; // Use CDN models for reliability
+    env.allowLocalModels = false;
     env.useBrowserCache = true;
+    
+    // Try models in order of preference
+    this.modelConfigs = [
+      {
+        // Try Qwen first - it's a good chat model available in Xenova
+        model: 'Xenova/Qwen1.5-0.5B-Chat',
+        contextLength: 1024,
+        maxTokens: 256,
+        task: 'text-generation',
+        chatTemplate: 'qwen'
+      },
+      {
+        // Phi-2 is another good small model
+        model: 'Xenova/phi-2',
+        contextLength: 2048,
+        maxTokens: 128,
+        task: 'text-generation',
+        chatTemplate: 'phi'
+      },
+      {
+        // TinyLlama variants to try
+        model: 'Xenova/TinyLlama-1.1B-Chat-v0.6',
+        contextLength: 2048,
+        maxTokens: 128,
+        task: 'text-generation',
+        chatTemplate: 'tinyllama'
+      },
+      {
+        // Last resort - GPT-2 (we know this works)
+        model: 'Xenova/gpt2',
+        contextLength: 512,
+        maxTokens: 50,
+        task: 'text-generation',
+        chatTemplate: 'none'
+      }
+    ];
+    
+    this.activeConfig = null;
   }
 
   // Classify device into tiers
@@ -20,139 +57,177 @@ export class LocalModelService {
     const mem = navigator.deviceMemory || 4;
     const cores = navigator.hardwareConcurrency || 4;
     
-    // Check for WebGPU support (more modern than just 'gpu' in navigator)
-    const hasWebGPU = 'gpu' in navigator;
-    
-    if (!hasWebGPU && cores < 4) return 'cpu-only';
-    if (mem >= 16 && cores >= 8) return 'high-end';
-    if (mem >= 8 && cores >= 4) return 'mid-range';
+    if (mem >= 8 && cores >= 4) return 'high-end';
+    if (mem >= 4 && cores >= 2) return 'mid-range';
     return 'high-end';
   }
 
-  // Select working model config based on device tier
-  getModelConfig() {
-    const configs = {
-      'high-end': {
-        model: 'Xenova/gpt2',              // Reliable, well-tested model
-        contextLength: 1024,
-        maxTokens: 256,
-        temperature: 0.7
-      },
-      'mid-range': {
-        model: 'Xenova/distilgpt2',        // Smaller, faster version of GPT-2
-        contextLength: 1024,
-        maxTokens: 128,
-        temperature: 0.7
-      },
-      'low-end': {
-        model: 'Xenova/distilgpt2',        // Same as mid-range but with lower limits
-        contextLength: 512,
-        maxTokens: 64,
-        temperature: 0.8
-      },
-      'cpu-only': {
-        model: 'Xenova/distilgpt2',        // Even on CPU-only, try with very low limits
-        contextLength: 256,
-        maxTokens: 32,
-        temperature: 0.8
-      }
-    };
-    return configs[this.deviceType] || configs['low-end'];
-  }
-
-  // Initialize the selected model pipeline
+  // Initialize the model
   async initialize(progressCallback = null) {
     if (this.isLoading || this.isReady) return;
-    if (!this.modelConfig) {
-      console.warn('No local model available for this device.');
-      return;
-    }
 
     this.isLoading = true;
-    console.log(`🔄 Loading local model: ${this.modelConfig.model} for ${this.deviceType} device...`);
+    console.log(`🔄 Initializing local model service...`);
 
-    try {
-      // Create progress wrapper to handle the callback format
-      const wrappedCallback = progressCallback ? (progress) => {
-        if (typeof progress === 'object' && progress.progress !== undefined) {
-          progressCallback(progress);
-        } else if (typeof progress === 'number') {
-          progressCallback({ progress: Math.round(progress * 100) });
-        }
-      } : null;
-
-      this.pipeline = await pipeline(
-        'text-generation',
-        this.modelConfig.model,
-        { 
-          progress_callback: wrappedCallback,
-          // Additional options for better loading
-          revision: 'main',
-          cache_dir: './.cache'
-        }
-      );
-      
-      this.isReady = true;
-      console.log(`✅ Local model loaded successfully: ${this.modelConfig.model} (${this.deviceType})`);
-      
-      // Test the model with a simple generation
-      await this.testModel();
-    } catch (error) {
-      console.error('Failed to load local model:', error);
-      
-      // Try fallback to an even simpler model
-      if (this.modelConfig.model !== 'Xenova/distilgpt2') {
-        console.log('🔄 Trying fallback model...');
-        this.modelConfig = {
-          model: 'Xenova/distilgpt2',
-          contextLength: 256,
-          maxTokens: 32,
-          temperature: 0.8
-        };
-        
-        try {
-          this.pipeline = await pipeline('text-generation', 'Xenova/distilgpt2');
-          this.isReady = true;
-          console.log('✅ Fallback model loaded successfully');
-        } catch (fallbackError) {
-          console.error('Fallback model also failed:', fallbackError);
-        }
+    const wrappedCallback = progressCallback ? (progress) => {
+      if (typeof progress === 'object' && progress.progress !== undefined) {
+        progressCallback(progress);
+      } else if (typeof progress === 'number') {
+        progressCallback({ progress: Math.round(progress * 100) });
       }
-    } finally {
-      this.isLoading = false;
+    } : null;
+
+    // Try each model configuration
+    for (const config of this.modelConfigs) {
+      try {
+        console.log(`🔍 Trying to load: ${config.model}`);
+        
+        this.pipeline = await pipeline(
+          config.task,
+          config.model,
+          { 
+            progress_callback: wrappedCallback,
+            revision: 'main'
+          }
+        );
+        
+        this.activeConfig = config;
+        this.isReady = true;
+        console.log(`✅ Model loaded successfully: ${config.model}`);
+        
+        // Test the model
+        const testSuccess = await this.testModel();
+        if (testSuccess) {
+          break; // Model works, stop trying others
+        } else {
+          console.warn(`⚠️ Model ${config.model} loaded but test failed, trying next...`);
+          this.isReady = false;
+          this.pipeline = null;
+          this.activeConfig = null;
+        }
+        
+      } catch (error) {
+        console.log(`❌ Failed to load ${config.model}:`, error.message);
+        continue; // Try next model
+      }
     }
+    
+    if (!this.isReady) {
+      console.error('❌ No suitable local model could be loaded.');
+    }
+    
+    this.isLoading = false;
   }
 
   // Test the model to ensure it's working
   async testModel() {
     try {
-      const testResult = await this.pipeline('Hello', {
-        max_new_tokens: 5,
+      const testPrompt = this.formatPrompt("Hello");
+      
+      const result = await this.pipeline(testPrompt, {
+        max_new_tokens: 10,
         temperature: 0.7,
         do_sample: true,
-        pad_token_id: 50256 // GPT-2 pad token
+        // Use appropriate tokens for the model
+        pad_token_id: this.getPadToken(),
+        eos_token_id: this.getEosToken()
       });
-      console.log('✅ Model test successful');
+      
+      // Check if we got a valid response
+      const hasResult = result && (
+        (Array.isArray(result) && result.length > 0 && result[0].generated_text) ||
+        (result.generated_text)
+      );
+      
+      if (hasResult) {
+        console.log('✅ Model test successful');
+        return true;
+      } else {
+        console.warn('⚠️ Model test produced no output');
+        return false;
+      }
     } catch (error) {
-      console.warn('Model test failed, but model may still work:', error);
+      console.warn('Model test failed:', error);
+      return false;
+    }
+  }
+
+  // Get appropriate pad token for the model
+  getPadToken() {
+    if (!this.activeConfig) return 50256; // GPT-2 default
+    
+    const tokenMap = {
+      'qwen': 151643,
+      'phi': 50256,
+      'tinyllama': 2,
+      'none': 50256 // GPT-2
+    };
+    
+    return tokenMap[this.activeConfig.chatTemplate] || 50256;
+  }
+
+  // Get appropriate EOS token for the model
+  getEosToken() {
+    if (!this.activeConfig) return 50256; // GPT-2 default
+    
+    const tokenMap = {
+      'qwen': 151643,
+      'phi': 50256,
+      'tinyllama': 2,
+      'none': 50256 // GPT-2
+    };
+    
+    return tokenMap[this.activeConfig.chatTemplate] || 50256;
+  }
+
+  // Format prompt based on model's chat template
+  formatPrompt(message) {
+    if (!this.activeConfig) return message;
+    
+    switch (this.activeConfig.chatTemplate) {
+      case 'qwen':
+        return `<|im_start|>system
+You are a helpful assistant.<|im_end|>
+<|im_start|>user
+${message}<|im_end|>
+<|im_start|>assistant
+`;
+      
+      case 'phi':
+        return `Instruct: ${message}\nOutput:`;
+      
+      case 'tinyllama':
+        return `<|system|>
+You are a helpful AI assistant.</s>
+<|user|>
+${message}</s>
+<|assistant|>
+`;
+      
+      case 'none':
+      default:
+        // For GPT-2, try to guide it toward Q&A
+        if (message.includes('?')) {
+          return `Q: ${message}\nA:`;
+        }
+        return message;
     }
   }
 
   // Check if local inference should handle this request
   isSuitable(message) {
-    if (!this.isReady || !this.modelConfig) return false;
+    if (!this.isReady || !this.activeConfig) return false;
     
     // Estimate tokens (rough approximation: 1 token ≈ 4 characters)
     const tokenEstimate = message.length / 4;
     
-    // Leave room for the response
-    const maxInputTokens = this.modelConfig.contextLength - this.modelConfig.maxTokens;
+    // Be conservative with context length
+    const maxInputTokens = (this.activeConfig.contextLength - this.activeConfig.maxTokens) * 0.5;
     
-    // Only handle messages that fit comfortably in context
-    return tokenEstimate <= maxInputTokens * 0.7; // Use 70% of available space
+    return tokenEstimate <= maxInputTokens;
   }
 
-  // Generate text locally with better prompting
+  // Generate text locally
   async generate(prompt, options = {}) {
     if (!this.isReady) {
       throw new Error('Local model not initialized');
@@ -161,176 +236,130 @@ export class LocalModelService {
     const startTime = performance.now();
     
     try {
-      // Create a better response based on the type of question
-      let response = await this.generateSmartResponse(prompt, options);
+      // Validate input length
+      if (!this.isSuitable(prompt)) {
+        throw new Error('Input too long for local model');
+      }
+      
+      // Format the prompt based on model type
+      const formattedPrompt = this.formatPrompt(prompt);
+      
+      console.log('🤖 Generating with:', this.activeConfig.model);
+      
+      // Generate with conservative settings to avoid errors
+      const result = await this.pipeline(formattedPrompt, {
+        max_new_tokens: Math.min(
+          options.maxTokens || this.activeConfig.maxTokens,
+          this.activeConfig.maxTokens
+        ),
+        temperature: options.temperature || 0.7,
+        top_p: 0.9,
+        do_sample: true,
+        pad_token_id: this.getPadToken(),
+        eos_token_id: this.getEosToken(),
+        repetition_penalty: 1.1,
+        // Ensure we don't exceed context
+        truncation: true,
+        max_length: this.activeConfig.contextLength,
+        return_full_text: false,
+      });
+      console.log(result)
+      // Extract the response
+      let generated = '';
+      if (Array.isArray(result) && result.length > 0) {
+        generated = result[0].generated_text || '';
+              console.log(generated)
+
+      } else if (result && result.generated_text) {
+        generated = result.generated_text;
+                      console.log(generated)
+
+      }
+      
+      // Clean the response based on model type
+      // generated = this.cleanGeneratedText(generated, formattedPrompt);
+      
+      // Validate we got something meaningful
+      if (!generated) {
+        generated = "I couldn't generate a proper response. The local model has limitations.";
+      }
       
       const responseTime = performance.now() - startTime;
 
       return {
-        text: response,
+        text: generated,
         metrics: {
           responseTime: `${responseTime.toFixed(0)}ms`,
-          tokens: response.length / 4,
-          model: this.modelConfig.model
+          tokens: generated.length / 4,
+          model: this.activeConfig.model
         },
         deviceType: this.deviceType,
-        model: this.modelConfig.model.split('/')[1] || this.modelConfig.model
+        model: this.activeConfig.model.split('/')[1] || this.activeConfig.model
       };
+      
     } catch (error) {
       console.error('Generation error:', error);
+      
+      // Provide helpful error message
+      if (error.message.includes('offset is out of bounds')) {
+        throw new Error('Model memory error. Try a shorter input or use cloud models.');
+      }
+      
       throw new Error(`Local generation failed: ${error.message}`);
     }
   }
 
-  // Generate contextually appropriate responses
-  async generateSmartResponse(prompt, options = {}) {
-    // Handle different types of questions with appropriate responses
+  // Clean up generated text based on model type
+  cleanGeneratedText(text, originalPrompt) {
+    if (!text || !this.activeConfig) return "";
     
-    // Math questions
-    if (this.isMathQuestion(prompt)) {
-      return this.handleMathQuestion(prompt);
+    // Remove the original prompt if present
+    if (text.startsWith(originalPrompt)) {
+      text = text.substring(originalPrompt.length);
     }
     
-    // Greetings
-    if (this.isGreeting(prompt)) {
-      return this.handleGreeting(prompt);
-    }
-    
-    // Simple factual questions
-    if (this.isSimpleQuestion(prompt)) {
-      return this.generateWithModel(prompt);
-    }
-    
-    // For other questions, try to use the model but with better prompting
-    return await this.generateWithModel(prompt, options);
-  }
-
-  isMathQuestion(prompt) {
-    return /[\d\s\+\-\*\/\(\)\.]+\s*[\+\-\*\/]\s*[\d\s\+\-\*\/\(\)\.]+/i.test(prompt) ||
-           /what'?s\s+\d+.*[\+\-\*\/].*\d+/i.test(prompt);
-  }
-
-  isGreeting(prompt) {
-    return /^(hi|hello|hey|good\s*(morning|afternoon|evening)|greetings)/i.test(prompt);
-  }
-
-  isSimpleQuestion(prompt) {
-    return prompt.length < 100 && prompt.includes('?');
-  }
-
-  handleMathQuestion(prompt) {
-    try {
-      // Extract the math expression
-      const mathMatch = prompt.match(/(\d+)\s*([\+\-\*\/])\s*(\d+)/);
-      if (mathMatch) {
-        const [, num1, operator, num2] = mathMatch;
-        const a = parseFloat(num1);
-        const b = parseFloat(num2);
-        let result;
+    // Clean based on chat template
+    switch (this.activeConfig.chatTemplate) {
+      case 'qwen':
+        // Remove any remaining chat markers
+        text = text.replace(/<\|im_start\|>/g, '')
+                   .replace(/<\|im_end\|>/g, '')
+                   .split('<|im_start|>')[0]; // Stop at next turn
+        break;
         
-        switch (operator) {
-          case '+': result = a + b; break;
-          case '-': result = a - b; break;
-          case '*': result = a * b; break;
-          case '/': result = b !== 0 ? a / b : 'undefined (division by zero)'; break;
-          default: result = 'unable to calculate';
-        }
+      case 'phi':
+        // Remove instruction markers
+        text = text.replace(/Instruct:/g, '')
+                   .replace(/Output:/g, '');
+        break;
         
-        return `${a} ${operator} ${b} = ${result}`;
-      }
-    } catch (error) {
-      console.error('Math calculation error:', error);
+      case 'tinyllama':
+        // Remove chat tokens
+        text = text.replace(/<\|[^|]+\|>/g, '')
+                   .replace(/<\/s>/g, '');
+        break;
+        
+      case 'none':
+        // For GPT-2, clean Q&A format
+        text = text.replace(/^A:\s*/i, '')
+                   .replace(/^Q:\s*/i, '');
+        break;
     }
     
-    return "I can help with basic math! Could you please write the calculation in a format like '2 + 2' or 'what's 5 * 3'?";
-  }
-
-  handleGreeting(prompt) {
-    const greetings = [
-      "Hello! How can I help you today?",
-      "Hi there! What would you like to know?", 
-      "Hey! I'm here to assist you.",
-      "Hello! I'm ready to help with your questions.",
-      "Hi! What can I do for you?"
-    ];
-    return greetings[Math.floor(Math.random() * greetings.length)];
-  }
-
-  handleSimpleQuestion(prompt) {
-    // For simple questions, provide helpful responses
-    if (/how are you/i.test(prompt)) {
-      return "I'm doing well, thank you! I'm here to help answer your questions.";
-    }
-    
-    if (/what.*time/i.test(prompt)) {
-      return `The current time is ${new Date().toLocaleTimeString()}.`;
-    }
-    
-    if (/what.*date/i.test(prompt)) {
-      return `Today is ${new Date().toLocaleDateString()}.`;
-    }
-    
-    // For other simple questions, give a helpful response
-    return "That's an interesting question! I'd be happy to help, though I may have limited information as a local model. What specifically would you like to know?";
-  }
-
-  async generateWithModel(prompt, options = {}) {
-    try {
-      const { maxTokens, temperature } = this.modelConfig;
-      
-      // Create a better prompt format for the model
-      const formattedPrompt = `Question: ${prompt}\nAnswer: `;
-      
-      // Ensure prompt isn't too long
-      const maxPromptLength = (this.modelConfig.contextLength - maxTokens) * 3; // Rough char estimate
-      const truncatedPrompt = formattedPrompt.length > maxPromptLength 
-        ? formattedPrompt.substring(0, maxPromptLength) 
-        : formattedPrompt;
-
-      const result = await this.pipeline(truncatedPrompt, {
-        max_new_tokens: Math.min(options.maxTokens || maxTokens, 100), // Reasonable length
-        temperature: options.temperature || 0.7,
-        top_p: 0.9,
-        do_sample: true,
-        pad_token_id: 50256,
-        eos_token_id: 50256,
-        repetition_penalty: 1.2,
-        no_repeat_ngram_size: 2
-      });
-
-      // Extract and clean the response
-      let generatedText;
-      if (Array.isArray(result)) {
-        generatedText = result[0].generated_text.replace(truncatedPrompt, '').trim();
-      } else {
-        generatedText = result.generated_text.replace(truncatedPrompt, '').trim();
-      }
-
-      // Basic cleanup only
-      generatedText = this.cleanGeneratedText(generatedText);
-      
-      // Return the generated text or a minimal fallback
-      return generatedText || "I'm not sure about that specific question.";
-      
-    } catch (error) {
-      console.error('Model generation error:', error);
-      return "I'm having trouble generating a response right now.";
-    }
-  }
-
-  // Clean up generated text
-  cleanGeneratedText(text) {
-    if (!text) return "";
-    
-    // Remove common artifacts
+    // General cleanup
     text = text
-      .replace(/^\s*[\.\,\;\:\!]\s*/g, '') // Remove leading punctuation
+      .trim()
       .replace(/\s+/g, ' ') // Normalize whitespace
-      .trim();
+      .split('\n')[0]; // Take first line for cleaner response
     
-    // If text is too short or just punctuation, return fallback
-    if (text.length < 3 || /^[\.\,\;\:\!\?\s]+$/.test(text)) {
-      return "I understand your question. Let me help you with that.";
+    // Limit length
+    if (text.length > 200) {
+      const sentenceEnd = text.search(/[.!?]\s/);
+      if (sentenceEnd > 50 && sentenceEnd < 180) {
+        text = text.substring(0, sentenceEnd + 1);
+      } else {
+        text = text.substring(0, 150) + '...';
+      }
     }
     
     return text;
@@ -338,13 +367,17 @@ export class LocalModelService {
 
   // Get status for UI
   getStatus() {
+    const modelName = this.activeConfig ? 
+      (this.activeConfig.model.split('/')[1] || this.activeConfig.model) : 
+      null;
+      
     return {
       deviceType: this.deviceType,
-      model: this.modelConfig?.model?.split('/')[1] || this.modelConfig?.model || null,
+      model: modelName,
       isReady: this.isReady,
       isLoading: this.isLoading,
-      contextLength: this.modelConfig?.contextLength || 0,
-      maxTokens: this.modelConfig?.maxTokens || 0
+      contextLength: this.activeConfig?.contextLength || 0,
+      maxTokens: this.activeConfig?.maxTokens || 0
     };
   }
 
@@ -353,6 +386,7 @@ export class LocalModelService {
     this.isReady = false;
     this.isLoading = false;
     this.pipeline = null;
+    this.activeConfig = null;
     console.log('🧹 Local model disposed');
   }
 }
