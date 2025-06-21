@@ -38,14 +38,6 @@ export class LocalModelService {
         maxTokens: 128,
         task: 'text-generation',
         chatTemplate: 'tinyllama'
-      },
-      {
-        // Last resort - GPT-2 (we know this works)
-        model: 'Xenova/gpt2',
-        contextLength: 512,
-        maxTokens: 50,
-        task: 'text-generation',
-        chatTemplate: 'none'
       }
     ];
     
